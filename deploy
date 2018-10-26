@@ -1,0 +1,216 @@
+#!/bin/bash
+
+# Simple deployment script to configure Docker-based environments for Drupal sites.
+
+function katli_help {
+echo -e "
+
+deploy for stasis
+
+Simple deployment script to configure Docker-based environments for Drupal sites.
+
+Setup:
+    ./deploy init        # copies the site's default.settings.php and default.services.yml
+                         # to /settings/settings.php and settings/services.yml so you can
+                         # edit these if you need. The DB is set at the bottom.
+                         # Docker will mount settings as docroot/sites/default.
+
+    ./deploy init d7     # Will inject the DB values as well
+    ./deploy init d8     # Will inject the DB values as well
+
+    ./deploy si          # run the site installer
+    ./deploy db          # import the sql/<sitename>.sql.gz and
+
+Get a terminal (drush and drupal console installed):
+ ./deploy
+
+Migrations. A secondary database called drupal_legacy is already configured and
+works the same as the regular db command:
+
+    ./deploy db_legacy   # import the sql/<sitename>.sql.gz and
+
+Delete DB:
+    ./deploy xx       # delete the DB so you can run a fresh db import later
+
+"
+}
+
+MYSQL_PWD='my-secret-pw' # also change this value in docker-compose.yml
+SALT=`date | shasum` # for Drupal 8. You may want to replace this if your OS does not have shasum installed.
+KATLI_SHELL='php7' # if you have troubles with Drupal 7 use "php56"
+
+
+if [[ "$1" == "help" ]];
+then
+  katli_help;
+  exit
+fi
+
+# new site (creates placeholders only)
+# detect db or not
+# run si
+
+# init site (creates settings.php and services.yml)
+if [[ "$1" == "init" ]];
+then
+
+  # remove old settings, copy fresh from defaults
+  rm -Rf ./settings/settings.php
+  rm -Rf ./settings/services.yml
+  cp ./repo/docroot/sites/default/default.settings.php ./settings/settings.php
+  cp ./repo/docroot/sites/default/default.services.yml ./settings/services.yml
+
+  # drupal 7 specifics
+  if [[ "$2" == "d7" ]];
+  then
+    echo "
+\$databases['default']['default'] = array(
+  'driver' => 'mysql',
+  'database' => 'drupal',
+  'username' => 'root',
+  'password' => '${MYSQL_PWD}',
+  'host' => 'db',
+  'prefix' => '',
+);
+\$conf['file_public_path'] = 'sites/default/files';
+\$conf['file_temporary_path'] = '/tmp';
+    " >> ./settings/settings.php
+  fi
+
+  # drupal 8 specifics
+  if [[ "$2" == "d8" ]];
+  then
+    echo "
+\$databases['default']['default'] = array (
+  'database' => 'drupal',
+  'username' => 'root',
+  'password' => '${MYSQL_PWD}',
+  'prefix' => '',
+  'host' => 'db',
+  'port' => '3306',
+  'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
+  'driver' => 'mysql',
+);
+\$databases['migrate']['default'] = array (
+  'database' => 'drupal_legacy',
+  'username' => 'root',
+  'password' => '${MYSQL_PWD}',
+  'prefix' => '',
+  'host' => 'db',
+  'port' => '3306',
+  'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
+  'driver' => 'mysql',
+);
+\$config_directories['sync'] = 'sites/default/config';
+\$settings['hash_salt'] = '${SALT}';
+    " >> ./settings/settings.php
+    echo "NOTE: you will most certainly want to run ./deploy si next for Drupal 8 sites"
+  fi
+  if [[ -z "$2" ]];
+  then
+    echo
+    echo "You did not specify d7 or d8 as your last parameter. You will have to conifgure your settings/settings.php manually or run this command again."
+    echo "Databases: drupal and drupal_legacy"
+    echo "username: root"
+    echo "password: ${MYSQL_PWD}"
+    echo "host: db"
+  fi
+  echo
+  echo "Initialization complete, you may now use si/db commands."
+  exit
+fi
+
+# delete DB
+if [[ "$1" == "xx" ]];
+then
+  docker exec -t stasis_db_1 /bin/bash -c "MYSQL_PWD='${MYSQL_PWD}' /usr/bin/mysqladmin -u root drop drupal --force"
+  docker exec -t stasis_db_1 /bin/bash -c "MYSQL_PWD='${MYSQL_PWD}' /usr/bin/mysqladmin -u root drop drupal_legacy --force"
+fi
+
+# make sure the DB always exists
+docker exec -t stasis_db_1 /bin/bash -c "MYSQL_PWD='${MYSQL_PWD}' /usr/bin/mysqladmin -u root create drupal" 2>&1 >/dev/null
+docker exec -t stasis_db_1 /bin/bash -c "MYSQL_PWD='${MYSQL_PWD}' /usr/bin/mysqladmin -u root create drupal_legacy" 2>&1 >/dev/null
+
+# run site install with standard profile
+if [[ "$1" == "si" ]];
+then
+  echo "Installing Drupal..."
+  if [[ -a ./settings/settings.php ]]
+  then
+    echo "Running installer:"
+    docker exec -t stasis_${KATLI_SHELL}_1 /bin/bash -c "cd /var/www/repo/docroot && /usr/local/bin/drush si standard -y"
+    echo "Login URL:"
+    docker exec -t stasis_${KATLI_SHELL}_1 /bin/bash -c 'cd /var/www/repo/docroot && drush uli'
+  else
+    echo "The settings.php file has not been created. Stop your docker instances and run ./deploy init d8 # or d7 if you wish"
+  fi
+  # @todo set settings.php and services.yml to 444
+fi
+
+# load the DB, and a legacy DB to import from if present
+if [[ "$1" == "db" ]];
+then
+  if [[ -a ./sql/drupal.sql.gz ]]
+  then
+    echo "Importing db..."
+    docker exec -t stasis_db_1 /bin/bash -c "zcat /var/sql/drupal.sql.gz | MYSQL_PWD='${MYSQL_PWD}' /usr/bin/mysql -u root drupal"
+    echo "Running update hooks..."
+    docker exec -t stasis_${KATLI_SHELL}_1 /bin/bash -c 'cd /var/www/repo/docroot && drush updb'
+    docker exec -t stasis_${KATLI_SHELL}_1 /bin/bash -c 'cd /var/www/repo/docroot && drush cr'
+    echo
+    echo  "Make sure to revert features or drush cim now if appropriate <--"
+    docker exec -t stasis_${KATLI_SHELL}_1 /bin/bash -c 'cd /var/www/repo/docroot && drush uli'
+  else
+    echo "Could not find sql/drupal.sql.gz"
+  fi
+
+if [[ "$1" == "db_legacy" ]];
+then
+  if [[ -a ./sql/drupal_legacy.sql.gz ]]
+  then
+    echo "NOT Importing legacy..."
+    #docker exec -t stasis_db_1 /bin/bash -c "zcat /var/sql/drupal_legacy.sql.gz | MYSQL_PWD='${MYSQL_PWD}' /usr/bin/mysql -u root drupal_legacy"
+  else
+    echo "Could not find sql/drupal_legacy.sql.gz you may need this if you are doing migrations."
+  fi
+fi
+fi
+
+# show the user how to connect
+echo
+echo "PHP 7 Connect info:"
+echo
+echo "If hosted in Linux server is at: `docker inspect --format='{{range $p, $conf := .NetworkSettings.Networks}} {{$p}} -> {{$conf.IPAddress}} {{end}}' stasis_php7_1`"
+echo "If hosted in a VM use your docker-machine or boot2docker IP and this port: `docker inspect --format='{{range $p, $conf := .NetworkSettings.Ports}} {{$p}} -> {{(index $conf 0).HostPort}} {{end}}' stasis_php7_1`"
+echo
+#echo "PHP 5.6 Connect info:"
+#echo
+#echo "If hosted in Linux server is at: `docker inspect --format='{{range $p, $conf := .NetworkSettings.Networks}} {{$p}} -> {{$conf.IPAddress}} {{end}}' stasis_php56_1`"
+#echo "If hosted in a VM use your docker-machine or boot2docker IP and this port: `docker inspect --format='{{range $p, $conf := .NetworkSettings.Ports}} {{$p}} -> {{(index $conf 0).HostPort}} {{end}}' stasis_php56_1`"
+
+echo '
+ ________________________________________ 
+/ welcome to stasis!                     \
+| drush and drupal console are ready.    |
+\ pleasantries are over now              /
+ ---------------------------------------- 
+    \
+     \
+      \     
+                    ##        .            
+              ## ## ##       ==            
+           ## ## ## ##      ===            
+       /""""""""""""""""___/ ===        
+  ~~~ {~~ ~~~~ ~~~ ~~~~ ~~ ~ /  ===- ~~~   
+       \______ o          __/            
+        \    \        __/             
+          \____\______/ '
+
+
+# launch a console
+# only go interactive if you have a shell, otherwise assume testing
+# turns out it is hard to find interactive status so "not jenkins"
+if [[ ! -v "JENKINS_VERSION" ]];
+then
+  docker exec -ti stasis_${KATLI_SHELL}_1 /bin/bash
+fi
