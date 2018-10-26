@@ -6,7 +6,11 @@ migrations, for sites which feature a docroot.
 
 ## Before you begin
 
-Open a terminal window and run the following:
+1. Inside the `stasis` folder, copy or link your Drupal folder. Rename the folder to be `repo`.
+
+2. After doing this, run `./deploy init d8` from the `stasis` folder to create your `settings.php` and `services.yml` files.
+
+3. Open a terminal window and run the following:
 
     docker-compose up
 
@@ -14,15 +18,12 @@ You can control-C to close this window when you are done using the servers.
 Meanwhile, you can watch these logs to see if anything weird is happening in
 your site.
 
-    docker-compose down
+4. Run `./deploy` to get access to the terminal and see the serer's IP address.
 
-This will stop the process from a different terminal window.
-
-Now that you have docker-compose up running, you are ready to do setup.
+5. When you are finished, run `docker-compose down` to power down the servers (or press `ctrl-C` in the terminal where the logs appear.
 
 
-
-## Setup:
+## Command Overview:
 
 *Make sure that repo/docroot exists in this folder, containing your site's code first!*
 
