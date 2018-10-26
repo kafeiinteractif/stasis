@@ -27,16 +27,17 @@ Now that you have docker-compose up running, you are ready to do setup.
 *Make sure that repo/docroot exists in this folder, containing your site's code first!*
 
     ./deploy init        # copies the site's default.settings.php and default.services.yml
-                         # to /settings/settings.php and settings/services.yml so you can
-                         # edit these if you need. The DB is set at the bottom.
-                         # Docker will mount settings as docroot/sites/default.
+			 # to settings/settings.php and settings/services.yml
+			 # so you can edit these if you need. The DB is set at
+			 # the bottom if you add d7 or d8 as parameters (see
+			 # below).  Docker will mount settings as
+			 # docroot/sites/default.
 
     ./deploy init d7     # Will inject the DB values as well
     ./deploy init d8     # Will inject the DB values as well
 
     ./deploy si          # run the site installer
-    ./deploy db          # import the sql/<sitename>.sql.gz and
-
+    ./deploy db          # import the sql/drupal.sql.gz
 
 
 
