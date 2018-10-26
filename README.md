@@ -22,6 +22,8 @@ your site.
 
 5. When you are finished, run `docker-compose down` to power down the servers (or press `ctrl-C` in the terminal where the logs appear.
 
+_In some environments you may not be able to have `repo` as a simlink if the folder permissions are not appropriate. Consider testing `repo` as a folder if you are getting permission errors involving the current working directory on your local machine._
+
 
 ## Command Overview:
 
