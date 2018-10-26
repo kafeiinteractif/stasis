@@ -4,6 +4,22 @@ Single-site Docker environment for Drupal local site development and
 migrations, for sites which feature a docroot.
 
 
+## Before you begin
+
+Open a terminal window and run the following:
+
+    docker-compose up
+
+You can control-C to close this window when you are done using the servers.
+Meanwhile, you can watch these logs to see if anything weird is happening in
+your site.
+
+    docker-compose down
+
+This will stop the process from a different terminal window.
+
+Now that you have docker-compose up running, you are ready to do setup.
+
 
 
 ## Setup:
@@ -31,14 +47,12 @@ Drush and drupal console are already installed.
     ./deploy
 
 
-
-
 ## Migrations.
 
 A secondary database called drupal_legacy is already configured and
 works the same as the regular db import command:
 
-    ./deploy db_legacy   # import the sql/<sitename>.sql.gz and
+    ./deploy db_legacy   # import the sql/drupal_legacy.sql.gz DB
 
 ## Delete DB
 
