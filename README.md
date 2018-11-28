@@ -44,11 +44,25 @@ _In some environments you may not be able to have `repo` as a simlink if the fol
 
 
 
-## Get a terminal and find public IP
+## Start it, get a terminal and find public IP
 
-Drush and drupal console are already installed.
+Create a custom settings.php first if you have not already (see above).
+
+    ./deploy init d8
+
+Start up a console that will start the process and show the logs.
+
+    docker-compose up
+
+Now, in another terminal window, run the following command in this folder.
 
     ./deploy
+    
+There you go! You should be able to use drush, drupal console, and composer.
+
+When you are finished you can "exit" the deploy window if you wish. You can run the shutdown command from any terminal window:
+
+    docker-compose down
 
 
 ## Migrations.
